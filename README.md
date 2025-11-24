@@ -114,7 +114,7 @@ mkdir -p temp/uploads temp/output logs
 
 ```
 http://localhost:8000  # Development
-https://your-api-domain.com  # Production
+https://stem-splitter-api-production.up.railway.app  # Production
 ```
 
 ### Authentication
@@ -238,20 +238,20 @@ Returns ZIP file containing separated audio stems. The ZIP file contains WAV fil
 **Example Request (cURL):**
 ```bash
 # Basic request
-curl -X POST "http://localhost:8000/separate" \
+curl -X POST "https://stem-splitter-api-production.up.railway.app/separate" \
   -F "file=@audio.mp3" \
   -F "stems=2" \
   -o output.zip
 
 # With verbose output to see headers
-curl -X POST "http://localhost:8000/separate" \
+curl -X POST "https://stem-splitter-api-production.up.railway.app/separate" \
   -F "file=@audio.mp3" \
   -F "stems=4" \
   -v \
   -o output.zip
 
 # Check request ID from response headers
-curl -X POST "http://localhost:8000/separate" \
+curl -X POST "https://stem-splitter-api-production.up.railway.app/separate" \
   -F "file=@audio.mp3" \
   -F "stems=2" \
   -D headers.txt \
@@ -267,7 +267,7 @@ with open('audio.mp3', 'rb') as f:
     files = {'file': ('audio.mp3', f, 'audio/mpeg')}
     data = {'stems': 2}
     response = requests.post(
-        'http://localhost:8000/separate',
+        'https://stem-splitter-api-production.up.railway.app/separate',
         files=files,
         data=data,
         timeout=600
@@ -287,7 +287,7 @@ const formData = new FormData();
 formData.append('file', fileInput.files[0]);
 formData.append('stems', '2');
 
-const response = await fetch('http://localhost:8000/separate', {
+const response = await fetch('https://stem-splitter-api-production.up.railway.app/separate', {
   method: 'POST',
   body: formData,
 });
@@ -362,8 +362,13 @@ All responses include:
 
 ### Interactive API Documentation
 
+**Development:**
 - **Swagger UI:** `http://localhost:8000/docs`
 - **ReDoc:** `http://localhost:8000/redoc`
+
+**Production:**
+- **Swagger UI:** `https://stem-splitter-api-production.up.railway.app/docs`
+- **ReDoc:** `https://stem-splitter-api-production.up.railway.app/redoc`
 
 ## npm Package (JavaScript/TypeScript SDK)
 
@@ -385,7 +390,7 @@ import fs from 'fs';
 
 // Create client
 const client = new StemSplitterClient({
-  baseUrl: 'https://your-api-url.com'
+  baseUrl: 'https://stem-splitter-api-production.up.railway.app'
 });
 
 // Separate audio file
@@ -408,7 +413,7 @@ new StemSplitterClient(options?: StemSplitterOptions)
 ```
 
 **Options:**
-- `baseUrl` (string, optional): API base URL (default: `'http://localhost:8000'`)
+- `baseUrl` (string, optional): API base URL (default: `'https://stem-splitter-api-production.up.railway.app'`)
 - `timeout` (number, optional): Request timeout in milliseconds (default: `300000` = 5 minutes)
 
 #### Methods
@@ -465,7 +470,7 @@ console.log(info.endpoint); // "POST /separate"
 import { StemSplitterClient } from 'stem-splitter-api';
 
 const client = new StemSplitterClient({
-  baseUrl: 'https://api.example.com',
+  baseUrl: 'https://stem-splitter-api-production.up.railway.app',
 });
 
 async function handleFileUpload(file: File) {

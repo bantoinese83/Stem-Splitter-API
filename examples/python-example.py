@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 
 
-def separate_audio(file_path: str, api_url: str = "http://localhost:8000", stems: int = 2):
+def separate_audio(file_path: str, api_url: str = "https://stem-splitter-api-production.up.railway.app", stems: int = 2):
     """
     Separate an audio file into stems.
     
@@ -89,7 +89,7 @@ def separate_audio(file_path: str, api_url: str = "http://localhost:8000", stems
 def main():
     """Main example function."""
     # Configuration
-    API_URL = os.getenv("STEM_SPLITTER_API_URL", "http://localhost:8000")
+    API_URL = os.getenv("STEM_SPLITTER_API_URL", "https://stem-splitter-api-production.up.railway.app")
     AUDIO_FILE = "./data/audio_example.mp3"  # Change to your audio file
     STEMS = 2  # Options: 2, 4, or 5
     

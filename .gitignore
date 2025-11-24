@@ -76,6 +76,9 @@ logs/
 # pyenv
 .python-version
 
+# DigitalOcean
+.do/
+
 # mypy
 .mypy_cache/
 .dmypy.json

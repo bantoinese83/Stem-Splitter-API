@@ -39,7 +39,8 @@ Railway is the easiest option with automatic deployments from GitHub.
 
 4. **Get Your API URL**:
    - Railway provides a URL like: `https://your-app.railway.app`
-   - Use this URL in your SDK: `baseUrl: 'https://your-app.railway.app'`
+   - Production URL: `https://stem-splitter-api-production.up.railway.app`
+   - Use this URL in your SDK: `baseUrl: 'https://stem-splitter-api-production.up.railway.app'`
 
 #### Railway Configuration:
 

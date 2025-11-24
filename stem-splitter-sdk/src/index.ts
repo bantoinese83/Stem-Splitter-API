@@ -27,7 +27,7 @@ if (typeof window !== 'undefined' && typeof FormData === 'undefined') {
 }
 
 export interface StemSplitterOptions {
-  /** API base URL (default: 'http://localhost:8000') */
+  /** API base URL (default: 'https://stem-splitter-api-production.up.railway.app') */
   baseUrl?: string;
   /** Request timeout in milliseconds (default: 300000 = 5 minutes) */
   timeout?: number;
@@ -89,7 +89,7 @@ export class StemSplitterClient {
   private timeout: number;
 
   constructor(options: StemSplitterOptions = {}) {
-    this.baseUrl = options.baseUrl || 'http://localhost:8000';
+    this.baseUrl = options.baseUrl || 'https://stem-splitter-api-production.up.railway.app';
     this.timeout = options.timeout || 300000; // 5 minutes default
   }
 
@@ -102,7 +102,7 @@ export class StemSplitterClient {
    *
    * @example
    * ```typescript
-   * const client = new StemSplitterClient({ baseUrl: 'https://api.example.com' });
+   * const client = new StemSplitterClient({ baseUrl: 'https://stem-splitter-api-production.up.railway.app' });
    * const result = await client.separate('./audio.mp3', { stems: 2 });
    * fs.writeFileSync('output.zip', result.data);
    * ```

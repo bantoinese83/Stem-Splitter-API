@@ -21,10 +21,11 @@ Complete guide to host your API and publish the npm SDK package.
    - Select your repository
    - Railway auto-detects Dockerfile and deploys
    - Get your API URL: `https://your-app.railway.app`
+   - Production URL: `https://stem-splitter-api-production.up.railway.app`
 
 3. **Test**:
    ```bash
-   curl https://your-app.railway.app/health
+   curl https://stem-splitter-api-production.up.railway.app/health
    ```
 
 **Done!** Your API is live. Use the URL in your SDK.

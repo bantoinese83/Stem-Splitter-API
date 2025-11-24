@@ -14,7 +14,7 @@ async function exampleWithSDK() {
   console.log('=== Using SDK ===');
   
   const client = new StemSplitterClient({
-    baseUrl: 'http://localhost:8000', // Change to your API URL
+    baseUrl: 'https://stem-splitter-api-production.up.railway.app',
     timeout: 600000, // 10 minutes
   });
 
@@ -71,7 +71,7 @@ async function exampleWithFetch() {
     formData.append('file', fs.createReadStream('./data/audio_example.mp3'));
     formData.append('stems', '2');
 
-    const response = await fetch('http://localhost:8000/separate', {
+    const response = await fetch('https://stem-splitter-api-production.up.railway.app/separate', {
       method: 'POST',
       body: formData,
       headers: formData.getHeaders(),

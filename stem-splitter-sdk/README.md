@@ -20,7 +20,7 @@ import fs from 'fs';
 
 // Create client
 const client = new StemSplitterClient({
-  baseUrl: 'https://your-api-url.com'
+  baseUrl: 'https://stem-splitter-api-production.up.railway.app'
 });
 
 // Separate audio file
@@ -44,7 +44,7 @@ new StemSplitterClient(options?: StemSplitterOptions)
 ```
 
 **Options:**
-- `baseUrl` (string, optional): API base URL (default: `'http://localhost:8000'`)
+- `baseUrl` (string, optional): API base URL (default: `'https://stem-splitter-api-production.up.railway.app'`)
 - `timeout` (number, optional): Request timeout in milliseconds (default: `300000` = 5 minutes)
 
 #### Methods
@@ -121,7 +121,7 @@ import path from 'path';
 
 async function main() {
   const client = new StemSplitterClient({
-    baseUrl: 'https://api.example.com',
+    baseUrl: 'https://stem-splitter-api-production.up.railway.app',
     timeout: 600000, // 10 minutes
   });
 
@@ -154,7 +154,7 @@ main();
 import { StemSplitterClient } from 'stem-splitter-api';
 
 const client = new StemSplitterClient({
-  baseUrl: 'https://api.example.com',
+  baseUrl: 'https://stem-splitter-api-production.up.railway.app',
 });
 
 async function handleFileUpload(file: File) {
