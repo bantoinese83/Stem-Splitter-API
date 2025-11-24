@@ -376,10 +376,10 @@ class SpleeterService:
                 raise HTTPException(
                     status_code=500, detail="Source directory is empty. No files to zip."
                 )
-            except PermissionError as e:
-                raise HTTPException(
-                    status_code=500, detail="Permission denied accessing source directory."
-                ) from e
+        except PermissionError as e:
+            raise HTTPException(
+                status_code=500, detail="Permission denied accessing source directory."
+            ) from e
 
         # Edge case: Output file already exists
         if output_path.exists():
@@ -392,10 +392,10 @@ class SpleeterService:
         # Ensure output directory exists
         try:
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            except PermissionError as e:
-                raise HTTPException(
-                    status_code=500, detail="Permission denied creating output directory."
-                ) from e
+        except PermissionError as e:
+            raise HTTPException(
+                status_code=500, detail="Permission denied creating output directory."
+            ) from e
 
         # Edge case: Check write permissions
         if not os.access(output_path.parent, os.W_OK):

@@ -181,13 +181,13 @@ async def separate_audio(
     )
 
     # Edge case: Validate stems parameter type and value
-        try:
-            stems_int = int(stems)
-        except (ValueError, TypeError) as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid stems value: {stems}. Must be an integer (2, 4, or 5).",
-            ) from e
+    try:
+        stems_int = int(stems)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid stems value: {stems}. Must be an integer (2, 4, or 5).",
+        ) from e
 
     if stems_int not in [2, 4, 5]:
         raise HTTPException(
