@@ -22,6 +22,9 @@ RUN mkdir -p temp/uploads temp/output logs
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
+# TensorFlow memory optimizations for Railway's limited resources
+ENV TF_FORCE_GPU_ALLOW_GROWTH=true
+ENV TF_CPP_MIN_LOG_LEVEL=2
 
 # Expose port
 EXPOSE 8000
