@@ -213,10 +213,9 @@ async def separate_audio(
 
     try:
         # Run Spleeter separation in thread pool (CPU bound / Blocking I/O)
-        with measure_time(f"[{request_id}] Separation"):
-            output_folder_path = await run_in_threadpool(
-                spleeter_service.run_separation, file_path, stems
-            )
+        output_folder_path = await run_in_threadpool(
+            spleeter_service.run_separation, file_path, stems
+        )
         cleanup_paths.append(output_folder_path)
 
         # Create zip file
@@ -224,10 +223,9 @@ async def separate_audio(
         cleanup_paths.append(zip_path)
 
         # Create zip in thread pool (I/O bound)
-        with measure_time(f"[{request_id}] Zip creation"):
-            await run_in_threadpool(
-                spleeter_service.create_zip, output_folder_path, zip_path
-            )
+        await run_in_threadpool(
+            spleeter_service.create_zip, output_folder_path, zip_path
+        )
         
         logger.info(f"[{request_id}] Separation completed: {zip_path}")
 
