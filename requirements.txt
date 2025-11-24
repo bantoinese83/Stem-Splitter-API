@@ -1,9 +1,11 @@
 fastapi>=0.104.1
 uvicorn[standard]>=0.24.0
-spleeter>=2.1.0
+spleeter>=2.4.2
 python-multipart>=0.0.6
 pydantic-settings>=2.0.3
 slowapi>=0.1.9
 pytest>=7.4.3
 # httpx is installed as a dependency of spleeter (version <0.20.0)
 # Do not add httpx here - it conflicts with spleeter's requirements
+# Note: spleeter>=2.4.2 is required for Python 3.11 compatibility
+# (spleeter 2.1.0 requires numpy<1.19.0 which is incompatible with Python 3.11)
