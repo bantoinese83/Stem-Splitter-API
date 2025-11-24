@@ -318,31 +318,6 @@ def get_performance_metrics() -> Dict[str, Any]:
         }
 
 
-@app.get("/metrics", tags=["Monitoring"])
-def get_performance_metrics() -> Dict[str, Any]:
-    """
-    Get performance metrics endpoint (for monitoring).
-    
-    Returns:
-        Performance statistics
-    """
-    from app.performance import get_performance_stats
-    
-    try:
-        stats = get_performance_stats()
-        return {
-            "status": "ok",
-            "metrics": stats,
-            "timestamp": time.time(),
-        }
-    except Exception as e:
-        logger.error(f"Error getting performance metrics: {e}", exc_info=True)
-        return {
-            "status": "error",
-            "error": str(e),
-        }
-
-
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Global exception handler for unexpected errors."""
