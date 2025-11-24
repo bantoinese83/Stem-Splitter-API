@@ -301,13 +301,20 @@ def get_performance_metrics() -> Dict[str, Any]:
     Returns:
         Performance statistics
     """
-    from app.performance import get_performance_stats
-    
     try:
+        from app.performance import get_performance_stats
         stats = get_performance_stats()
         return {
             "status": "ok",
             "metrics": stats,
+            "timestamp": time.time(),
+        }
+    except ImportError:
+        # Performance module not available (optional feature)
+        return {
+            "status": "ok",
+            "metrics": {},
+            "message": "Performance tracking not enabled",
             "timestamp": time.time(),
         }
     except Exception as e:
