@@ -1,0 +1,83 @@
+{
+  "name": "stem-splitter-api",
+  "version": "1.0.0",
+  "description": "JavaScript/TypeScript SDK for Stem Splitter API - Easy audio stem separation",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "module": "dist/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "test": "jest",
+    "prepare": "npm run build",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit --strict",
+    "quality": "npm run typecheck && npm run build && npm run lint && npm run format:check && npx knip",
+    "quality:fix": "npm run lint:fix && npm run format"
+  },
+  "keywords": [
+    "audio",
+    "stem",
+    "separation",
+    "spleeter",
+    "music",
+    "vocals",
+    "drums",
+    "api",
+    "sdk",
+    "typescript",
+    "javascript"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/jest": "^29.5.8",
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^8.48.0",
+    "@typescript-eslint/parser": "^8.48.0",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.4",
+    "jest": "^29.7.0",
+    "knip": "^5.70.2",
+    "prettier": "^3.6.2",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "form-data": "^4.0.0"
+  },
+  "peerDependencies": {
+    "form-data": "^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "form-data": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "browser": {
+    "form-data": false
+  }
+}
