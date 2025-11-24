@@ -2,8 +2,8 @@ fastapi>=0.103.0,<0.104.0
 uvicorn[standard]>=0.24.0
 spleeter>=2.4.2
 python-multipart>=0.0.6
-pydantic>=2.7.0,<3.0.0
-pydantic-settings>=2.0.3
+pydantic>=2.6.0,<2.7.0
+pydantic-settings>=2.0.0,<2.0.3
 slowapi>=0.1.9
 pytest>=7.4.3
 # httpx is installed as a dependency of spleeter (version <0.20.0)
@@ -12,4 +12,6 @@ pytest>=7.4.3
 # (spleeter 2.1.0 requires numpy<1.19.0 which is incompatible with Python 3.11)
 # Note: fastapi<0.104.0 is required because tensorflow 2.12.1 requires typing-extensions<4.6.0
 # while fastapi>=0.104.1 requires typing-extensions>=4.8.0
-# Note: pydantic>=2.7.0 is required for pydantic-settings>=2.0.3 compatibility
+# Note: pydantic<2.7.0 is required because tensorflow 2.12.1 requires typing-extensions<4.6.0
+# while pydantic>=2.7.0 requires typing-extensions>=4.6.1
+# Note: pydantic-settings<2.0.3 is required because pydantic-settings>=2.0.3 requires pydantic>=2.7.0
