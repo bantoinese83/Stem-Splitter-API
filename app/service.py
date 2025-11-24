@@ -273,7 +273,37 @@ class SpleeterService:
             )
         
         try:
+            # Configure TensorFlow to limit memory growth and prevent OOM
+            import tensorflow as tf
+            import os
+            
+            # Limit TensorFlow memory growth to prevent OOM errors
+            gpus = tf.config.list_physical_devices('GPU')
+            if gpus:
+                try:
+                    for gpu in gpus:
+                        tf.config.experimental.set_memory_growth(gpu, True)
+                except RuntimeError as e:
+                    logger.warning(f"GPU memory growth setting failed: {e}")
+            
+            # Set CPU memory limit (for Railway's limited resources)
+            # Allow TensorFlow to use up to 2GB of RAM
+            os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
+            os.environ['TF_GPU_ALLOCATOR'] = 'cuda_malloc_async'
+            
+            # Limit TensorFlow to use only necessary memory
+            # This helps prevent crashes on Railway's limited memory
+            try:
+                # Set inter/intra op threads to reduce memory usage
+                tf.config.threading.set_inter_op_parallelism_threads(1)
+                tf.config.threading.set_intra_op_parallelism_threads(1)
+            except Exception as e:
+                logger.warning(f"Could not set TensorFlow threading: {e}")
+            
+            logger.info("Initializing Spleeter separator...")
             separator = Separator(f"spleeter:{stems}stems")
+            
+            logger.info(f"Running separation for {file_path}...")
             separator.separate_to_file(str(file_path), str(settings.output_dir))
             logger.info(f"Separation completed for {file_path}")
             
