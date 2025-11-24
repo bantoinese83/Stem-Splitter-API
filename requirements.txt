@@ -5,4 +5,5 @@ python-multipart>=0.0.6
 pydantic-settings>=2.0.3
 slowapi>=0.1.9
 pytest>=7.4.3
-httpx>=0.25.1
+# httpx is installed as a dependency of spleeter (version <0.20.0)
+# Do not add httpx here - it conflicts with spleeter's requirements
