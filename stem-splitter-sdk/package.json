@@ -1,6 +1,6 @@
 {
   "name": "stem-splitter-api",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "JavaScript/TypeScript SDK for Stem Splitter API - Easy audio stem separation",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
