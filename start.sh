@@ -6,4 +6,5 @@
 PORT=${PORT:-8000}
 
 # Start uvicorn with the port
-exec uvicorn app.main:app --host 0.0.0.0 --port "$PORT" --workers 2
+# Use 1 worker to reduce memory usage (TensorFlow/Spleeter is memory-intensive)
+exec uvicorn app.main:app --host 0.0.0.0 --port "$PORT" --workers 1
