@@ -51,12 +51,26 @@ spleeter_service = SpleeterService()
 
 
 @app.middleware("http")
-async def add_request_id(request: Request, call_next):
-    """Add request ID to all requests for tracking."""
+async def add_request_id_and_timing(request: Request, call_next):
+    """Add request ID and track request timing."""
     request_id = str(uuid.uuid4())
     request.state.request_id = request_id
+    start_time = time.perf_counter()
+    
     response = await call_next(request)
+    
+    # Add performance headers
+    elapsed_time = time.perf_counter() - start_time
     response.headers["X-Request-ID"] = request_id
+    response.headers["X-Process-Time"] = f"{elapsed_time:.3f}"
+    
+    # Log slow requests
+    if elapsed_time > 1.0:
+        logger.warning(
+            f"[{request_id}] Slow request: {request.method} {request.url.path} "
+            f"took {elapsed_time:.3f}s"
+        )
+    
     return response
 
 
@@ -199,9 +213,10 @@ async def separate_audio(
 
     try:
         # Run Spleeter separation in thread pool (CPU bound / Blocking I/O)
-        output_folder_path = await run_in_threadpool(
-            spleeter_service.run_separation, file_path, stems
-        )
+        with measure_time(f"[{request_id}] Separation"):
+            output_folder_path = await run_in_threadpool(
+                spleeter_service.run_separation, file_path, stems
+            )
         cleanup_paths.append(output_folder_path)
 
         # Create zip file
@@ -209,9 +224,10 @@ async def separate_audio(
         cleanup_paths.append(zip_path)
 
         # Create zip in thread pool (I/O bound)
-        await run_in_threadpool(
-            spleeter_service.create_zip, output_folder_path, zip_path
-        )
+        with measure_time(f"[{request_id}] Zip creation"):
+            await run_in_threadpool(
+                spleeter_service.create_zip, output_folder_path, zip_path
+            )
         
         logger.info(f"[{request_id}] Separation completed: {zip_path}")
 
@@ -277,6 +293,56 @@ async def separate_audio(
             "Content-Length": str(zip_size),
         },
     )
+
+
+@app.get("/metrics", tags=["Monitoring"])
+def get_performance_metrics() -> Dict[str, Any]:
+    """
+    Get performance metrics endpoint (for monitoring).
+    
+    Returns:
+        Performance statistics
+    """
+    from app.performance import get_performance_stats
+    
+    try:
+        stats = get_performance_stats()
+        return {
+            "status": "ok",
+            "metrics": stats,
+            "timestamp": time.time(),
+        }
+    except Exception as e:
+        logger.error(f"Error getting performance metrics: {e}", exc_info=True)
+        return {
+            "status": "error",
+            "error": str(e),
+        }
+
+
+@app.get("/metrics", tags=["Monitoring"])
+def get_performance_metrics() -> Dict[str, Any]:
+    """
+    Get performance metrics endpoint (for monitoring).
+    
+    Returns:
+        Performance statistics
+    """
+    from app.performance import get_performance_stats
+    
+    try:
+        stats = get_performance_stats()
+        return {
+            "status": "ok",
+            "metrics": stats,
+            "timestamp": time.time(),
+        }
+    except Exception as e:
+        logger.error(f"Error getting performance metrics: {e}", exc_info=True)
+        return {
+            "status": "error",
+            "error": str(e),
+        }
 
 
 @app.exception_handler(Exception)

@@ -2,8 +2,9 @@ import logging
 import os
 import shutil
 import zipfile
+from functools import lru_cache
 from pathlib import Path
-from typing import List
+from typing import Dict, List, Optional
 
 from fastapi import UploadFile, HTTPException
 from spleeter.separator import Separator
@@ -11,6 +12,9 @@ from spleeter.separator import Separator
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Cache for Separator instances to avoid recreating models
+_SEPARATOR_CACHE: Dict[str, Optional[Separator]] = {}
 
 
 class SpleeterService:
@@ -53,9 +57,9 @@ class SpleeterService:
                 detail="Filename is too long. Maximum length is 255 characters."
             )
 
-        # Edge case: Invalid characters in filename
-        invalid_chars = ['<', '>', ':', '"', '|', '?', '*', '\x00']
-        if any(char in file.filename for char in invalid_chars):
+        # Edge case: Invalid characters in filename (optimized: use set for O(1) lookup)
+        invalid_chars = {'<', '>', ':', '"', '|', '?', '*', '\x00'}
+        if any(char in invalid_chars for char in file.filename):
             raise HTTPException(
                 status_code=400,
                 detail="Filename contains invalid characters."
@@ -150,11 +154,12 @@ class SpleeterService:
                     detail="No write permission to upload directory."
                 )
             
-            # Save file with size tracking
+            # Save file with size tracking (optimized: larger chunk size for better I/O)
             bytes_written = 0
+            chunk_size = 64 * 1024  # 64KB chunks for better performance
             with open(destination, "wb") as buffer:
                 while True:
-                    chunk = file.file.read(8192)  # Read in chunks
+                    chunk = file.file.read(chunk_size)
                     if not chunk:
                         break
                     # Edge case: Check size during upload
@@ -249,6 +254,64 @@ class SpleeterService:
                 detail="Error validating uploaded file."
             ) from e
 
+    def _get_separator(self, stems: int) -> Separator:
+        """
+        Get or create a Separator instance (cached for performance).
+        
+        Args:
+            stems: Number of stems (2, 4, or 5)
+            
+        Returns:
+            Separator instance
+        """
+        model_key = f"spleeter:{stems}stems"
+        
+        # Check cache first
+        if model_key in _SEPARATOR_CACHE and _SEPARATOR_CACHE[model_key] is not None:
+            return _SEPARATOR_CACHE[model_key]
+        
+        # Configure TensorFlow to limit memory growth and prevent OOM
+        import tensorflow as tf
+        
+        # Limit TensorFlow memory growth to prevent OOM errors
+        gpus = tf.config.list_physical_devices('GPU')
+        if gpus:
+            try:
+                for gpu in gpus:
+                    tf.config.experimental.set_memory_growth(gpu, True)
+            except RuntimeError as e:
+                logger.warning(f"GPU memory growth setting failed: {e}")
+        
+        # Limit TensorFlow to use only necessary memory
+        # This helps prevent crashes on Railway's limited memory
+        try:
+            # Set inter/intra op threads to reduce memory usage
+            tf.config.threading.set_inter_op_parallelism_threads(1)
+            tf.config.threading.set_intra_op_parallelism_threads(1)
+        except Exception as e:
+            logger.warning(f"Could not set TensorFlow threading: {e}")
+        
+        logger.info(f"Creating new Separator instance for {model_key}...")
+        separator = Separator(model_key)
+        
+        # Cache the separator (but allow it to be cleared if needed)
+        _SEPARATOR_CACHE[model_key] = separator
+        
+        return separator
+    
+    def _clear_separator_cache(self) -> None:
+        """Clear the separator cache to free memory."""
+        global _SEPARATOR_CACHE
+        for separator in _SEPARATOR_CACHE.values():
+            if separator is not None:
+                try:
+                    # Clean up TensorFlow resources
+                    del separator
+                except Exception as e:
+                    logger.warning(f"Error clearing separator: {e}")
+        _SEPARATOR_CACHE.clear()
+        logger.info("Separator cache cleared")
+    
     def run_separation(self, file_path: Path, stems: int) -> Path:
         """
         Runs Spleeter separation (blocking operation).
@@ -273,35 +336,8 @@ class SpleeterService:
             )
         
         try:
-            # Configure TensorFlow to limit memory growth and prevent OOM
-            import tensorflow as tf
-            import os
-            
-            # Limit TensorFlow memory growth to prevent OOM errors
-            gpus = tf.config.list_physical_devices('GPU')
-            if gpus:
-                try:
-                    for gpu in gpus:
-                        tf.config.experimental.set_memory_growth(gpu, True)
-                except RuntimeError as e:
-                    logger.warning(f"GPU memory growth setting failed: {e}")
-            
-            # Set CPU memory limit (for Railway's limited resources)
-            # Allow TensorFlow to use up to 2GB of RAM
-            os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
-            os.environ['TF_GPU_ALLOCATOR'] = 'cuda_malloc_async'
-            
-            # Limit TensorFlow to use only necessary memory
-            # This helps prevent crashes on Railway's limited memory
-            try:
-                # Set inter/intra op threads to reduce memory usage
-                tf.config.threading.set_inter_op_parallelism_threads(1)
-                tf.config.threading.set_intra_op_parallelism_threads(1)
-            except Exception as e:
-                logger.warning(f"Could not set TensorFlow threading: {e}")
-            
-            logger.info("Initializing Spleeter separator...")
-            separator = Separator(f"spleeter:{stems}stems")
+            # Get cached or create new separator
+            separator = self._get_separator(stems)
             
             logger.info(f"Running separation for {file_path}...")
             separator.separate_to_file(str(file_path), str(settings.output_dir))
@@ -407,50 +443,62 @@ class SpleeterService:
             files_added = 0
             total_size = 0
             
-            with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-                for root, _, files in os.walk(source_dir):
-                    for file_name in files:
-                        file_path = os.path.join(root, file_name)
+            # Optimized: Use Path objects and collect files first to reduce I/O
+            files_to_zip: List[tuple] = []
+            max_zip_size = 500 * 1024 * 1024  # 500MB
+            
+            # Collect all files first (single walk)
+            for root, _, files in os.walk(source_dir):
+                for file_name in files:
+                    file_path = Path(root) / file_name
+                    
+                    # Edge case: Skip if file doesn't exist (race condition)
+                    if not file_path.exists():
+                        logger.warning(f"Skipping non-existent file: {file_path}")
+                        continue
+                    
+                    # Edge case: Skip if not a file (symlink, etc.)
+                    if not file_path.is_file():
+                        logger.warning(f"Skipping non-file: {file_path}")
+                        continue
+                    
+                    # Edge case: Check file size before adding
+                    try:
+                        file_size = file_path.stat().st_size
+                        total_size += file_size
                         
-                        # Edge case: Skip if file doesn't exist (race condition)
-                        if not os.path.exists(file_path):
-                            logger.warning(f"Skipping non-existent file: {file_path}")
-                            continue
+                        # Prevent extremely large zips (safety limit)
+                        if total_size > max_zip_size:
+                            raise HTTPException(
+                                status_code=500,
+                                detail="Output zip file would be too large."
+                            )
                         
-                        # Edge case: Skip if not a file (symlink, etc.)
-                        if not os.path.isfile(file_path):
-                            logger.warning(f"Skipping non-file: {file_path}")
-                            continue
-                        
-                        # Edge case: Check file size before adding
+                        # Calculate relative path for archive
                         try:
-                            file_size = os.path.getsize(file_path)
-                            total_size += file_size
-                            
-                            # Prevent extremely large zips (safety limit)
-                            max_zip_size = 500 * 1024 * 1024  # 500MB
-                            if total_size > max_zip_size:
-                                raise HTTPException(
-                                    status_code=500,
-                                    detail="Output zip file would be too large."
-                                )
-                        except OSError as e:
-                            logger.warning(f"Could not get size for {file_path}: {e}")
-                            continue
-                        
-                        try:
-                            # Use relative path for archive
-                            arcname = os.path.relpath(file_path, source_dir)
+                            arcname = file_path.relative_to(source_dir)
                             # Edge case: Sanitize arcname to prevent zip slip
-                            if os.path.isabs(arcname) or '..' in arcname:
-                                arcname = os.path.basename(file_path)
-                            
-                            zipf.write(file_path, arcname)
-                            files_added += 1
-                        except (IOError, OSError, PermissionError) as e:
-                            logger.warning(f"Failed to add {file_path} to zip: {e}")
-                            # Continue with other files
-                            continue
+                            if '..' in str(arcname):
+                                arcname = Path(file_name)
+                        except ValueError:
+                            # Fallback if relative path fails
+                            arcname = Path(file_name)
+                        
+                        files_to_zip.append((file_path, str(arcname)))
+                    except OSError as e:
+                        logger.warning(f"Could not get size for {file_path}: {e}")
+                        continue
+            
+            # Now create zip with collected files (optimized: single write operation)
+            with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+                for file_path, arcname in files_to_zip:
+                    try:
+                        zipf.write(str(file_path), arcname)
+                        files_added += 1
+                    except (IOError, OSError, PermissionError) as e:
+                        logger.warning(f"Failed to add {file_path} to zip: {e}")
+                        # Continue with other files
+                        continue
                         
             # Edge case: Check if any files were added
             if files_added == 0:
