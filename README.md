@@ -201,6 +201,7 @@ Separate an audio file into stems.
 |-----------|------|----------|-------------|
 | `file` | File | Yes | Audio file to separate |
 | `stems` | Integer | No | Number of stems (2, 4, or 5). Default: 2 |
+| `async_mode` | Boolean | No | If `true`, returns job ID immediately and processes in background (recommended for Railway). Default: `true` |
 
 **Stems Options:**
 - **2 stems:** Vocals, Accompaniment
@@ -210,7 +211,28 @@ Separate an audio file into stems.
 **File Size Limits:**
 - Maximum: 100 MB (configurable via `MAX_FILE_SIZE_MB`)
 
-**Response:**
+**Response Modes:**
+
+**1. Async Mode (Default, Recommended for Railway):**
+- **Status Code:** `202 Accepted`
+- **Content-Type:** `application/json`
+- **Response:**
+```json
+{
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "pending",
+  "message": "Separation job created. Use the job_id to check status.",
+  "status_url": "/jobs/550e8400-e29b-41d4-a716-446655440000/status",
+  "result_url": "/jobs/550e8400-e29b-41d4-a716-446655440000/result"
+}
+```
+
+Use the `job_id` to:
+- Check status: `GET /jobs/{job_id}/status`
+- Download result: `GET /jobs/{job_id}/result` (when status is "completed")
+
+**2. Synchronous Mode (`async_mode=false`):**
+- **Status Code:** `200 OK`
 - **Content-Type:** `application/zip`
 - **Headers:**
   - `X-Request-ID`: Unique request identifier for tracking
@@ -225,6 +247,8 @@ Returns ZIP file containing separated audio stems. The ZIP file contains WAV fil
 
 **Note:** The filename format is `separated_{stems}stems_{unique_id}.zip` where `unique_id` is the first 8 characters of the request UUID.
 
+**⚠️ Important:** Synchronous mode may timeout on Railway due to edge proxy limits (~6-10 seconds). Use async mode for production deployments.
+
 **Error Responses:**
 
 | Status Code | Description |
@@ -235,37 +259,103 @@ Returns ZIP file containing separated audio stems. The ZIP file contains WAV fil
 | 500 | Internal Server Error - Processing failed or unexpected error |
 | 507 | Insufficient Storage - Not enough disk space available |
 
-**Example Request (cURL):**
+**Example Request (cURL) - Async Mode (Recommended):**
 ```bash
-# Basic request
+# Create job (returns job_id immediately)
 curl -X POST "https://stem-splitter-api-production.up.railway.app/separate" \
   -F "file=@audio.mp3" \
   -F "stems=2" \
+  -F "async_mode=true"
+
+# Response:
+# {
+#   "job_id": "550e8400-e29b-41d4-a716-446655440000",
+#   "status": "pending",
+#   "status_url": "/jobs/550e8400-e29b-41d4-a716-446655440000/status",
+#   "result_url": "/jobs/550e8400-e29b-41d4-a716-446655440000/result"
+# }
+
+# Check job status
+JOB_ID="550e8400-e29b-41d4-a716-446655440000"
+curl "https://stem-splitter-api-production.up.railway.app/jobs/$JOB_ID/status"
+
+# Download result when status is "completed"
+curl "https://stem-splitter-api-production.up.railway.app/jobs/$JOB_ID/result" \
+  -o output.zip
+```
+
+**Example Request (cURL) - Synchronous Mode:**
+```bash
+# Basic request (may timeout on Railway)
+curl -X POST "https://stem-splitter-api-production.up.railway.app/separate" \
+  -F "file=@audio.mp3" \
+  -F "stems=2" \
+  -F "async_mode=false" \
   -o output.zip
 
 # With verbose output to see headers
 curl -X POST "https://stem-splitter-api-production.up.railway.app/separate" \
   -F "file=@audio.mp3" \
   -F "stems=4" \
+  -F "async_mode=false" \
   -v \
   -o output.zip
-
-# Check request ID from response headers
-curl -X POST "https://stem-splitter-api-production.up.railway.app/separate" \
-  -F "file=@audio.mp3" \
-  -F "stems=2" \
-  -D headers.txt \
-  -o output.zip
-cat headers.txt | grep X-Request-ID
 ```
 
-**Example Request (Python):**
+**Example Request (Python) - Async Mode:**
+```python
+import requests
+import time
+
+# Create job
+with open('audio.mp3', 'rb') as f:
+    files = {'file': ('audio.mp3', f, 'audio/mpeg')}
+    data = {'stems': 2, 'async_mode': True}
+    response = requests.post(
+        'https://stem-splitter-api-production.up.railway.app/separate',
+        files=files,
+        data=data
+    )
+
+if response.status_code == 202:
+    job_data = response.json()
+    job_id = job_data['job_id']
+    
+    # Poll for completion
+    while True:
+        status_response = requests.get(
+            f'https://stem-splitter-api-production.up.railway.app/jobs/{job_id}/status'
+        )
+        status_data = status_response.json()
+        job_status = status_data['job']['status']
+        
+        if job_status == 'completed':
+            # Download result
+            result_response = requests.get(
+                f'https://stem-splitter-api-production.up.railway.app/jobs/{job_id}/result'
+            )
+            with open('output.zip', 'wb') as f:
+                f.write(result_response.content)
+            print("Separation completed!")
+            break
+        elif job_status == 'failed':
+            print(f"Separation failed: {status_data['job']['error']}")
+            break
+        else:
+            print(f"Status: {job_status}, waiting...")
+            time.sleep(2)
+else:
+    error = response.json()
+    print(f"Error: {error['detail']}")
+```
+
+**Example Request (Python) - Synchronous Mode:**
 ```python
 import requests
 
 with open('audio.mp3', 'rb') as f:
     files = {'file': ('audio.mp3', f, 'audio/mpeg')}
-    data = {'stems': 2}
+    data = {'stems': 2, 'async_mode': False}
     response = requests.post(
         'https://stem-splitter-api-production.up.railway.app/separate',
         files=files,
@@ -303,6 +393,58 @@ if (response.ok) {
   const error = await response.json();
   console.error('Error:', error.detail);
 }
+```
+
+### Async Job Endpoints
+
+#### Get Job Status
+
+**Endpoint:** `GET /jobs/{job_id}/status`
+
+Get the current status of a separation job.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "job": {
+    "job_id": "550e8400-e29b-41d4-a716-446655440000",
+    "status": "processing",
+    "stems": 2,
+    "created_at": 1703123456.789,
+    "started_at": 1703123457.123,
+    "progress": 0.65,
+    "elapsed_time_seconds": 12.5
+  }
+}
+```
+
+**Job Status Values:**
+- `pending`: Job created, waiting to start
+- `processing`: Separation in progress
+- `completed`: Separation completed, result available
+- `failed`: Separation failed (check `error` field)
+
+#### Get Job Result
+
+**Endpoint:** `GET /jobs/{job_id}/result`
+
+Download the result ZIP file for a completed job.
+
+**Response:**
+- **Status Code:** `200 OK` (if completed)
+- **Status Code:** `202 Accepted` (if still processing)
+- **Content-Type:** `application/zip` (when completed)
+
+**Example:**
+```bash
+# Check if ready
+curl "https://stem-splitter-api-production.up.railway.app/jobs/{job_id}/result"
+
+# If status is 202, job is still processing
+# If status is 200, download the ZIP file
+curl "https://stem-splitter-api-production.up.railway.app/jobs/{job_id}/result" \
+  -o output.zip
 ```
 
 ### Response Headers

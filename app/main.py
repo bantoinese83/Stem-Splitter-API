@@ -1,7 +1,9 @@
+import asyncio
 import logging
 import os
 import time
 import uuid
+from pathlib import Path
 from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Request, UploadFile
@@ -13,6 +15,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from app.config import settings
+from app.jobs import JobStatus, job_manager
 from app.service import SpleeterService
 
 # Configure structured logging
@@ -49,6 +52,86 @@ app.add_middleware(
 
 # Initialize service
 spleeter_service = SpleeterService()
+
+
+async def process_separation_job(job_id: str, file_path: Path, stems: int) -> None:
+    """
+    Process a separation job in the background.
+
+    Args:
+        job_id: Job identifier
+        file_path: Path to the audio file
+        stems: Number of stems to separate into
+    """
+    logger.info(f"[{job_id}] Starting background separation processing")
+    job_manager.update_job_status(job_id, JobStatus.PROCESSING, progress=0.1)
+
+    cleanup_paths = [file_path]
+    zip_path = settings.output_dir / f"{job_id}.zip"
+
+    try:
+        # Run Spleeter separation
+        job_manager.update_job_status(job_id, JobStatus.PROCESSING, progress=0.3)
+        output_folder_path = await run_in_threadpool(
+            spleeter_service.run_separation, file_path, stems
+        )
+        cleanup_paths.append(output_folder_path)
+
+        # Create zip file
+        job_manager.update_job_status(job_id, JobStatus.PROCESSING, progress=0.7)
+        await run_in_threadpool(spleeter_service.create_zip, output_folder_path, zip_path)
+        cleanup_paths.append(zip_path)
+
+        # Verify zip file
+        if not zip_path.exists() or zip_path.stat().st_size == 0:
+            raise Exception("Zip file was not created or is empty")
+
+        # Mark job as completed
+        job_manager.update_job_status(
+            job_id, JobStatus.COMPLETED, progress=1.0, result_path=zip_path
+        )
+        logger.info(f"[{job_id}] Separation completed successfully: {zip_path}")
+
+        # Schedule cleanup after 1 hour (give time for download)
+        await asyncio.sleep(3600)
+        spleeter_service.cleanup_files(cleanup_paths)
+        logger.info(f"[{job_id}] Cleaned up temporary files")
+
+    except Exception as e:
+        logger.error(f"[{job_id}] Separation failed: {e}", exc_info=True)
+        job_manager.update_job_status(
+            job_id, JobStatus.FAILED, progress=1.0, error=str(e)
+        )
+        # Cleanup on failure
+        spleeter_service.cleanup_files(cleanup_paths)
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Pre-warm TensorFlow models on startup and start background tasks."""
+    logger.info("Starting application startup tasks...")
+
+    # Pre-warm TensorFlow models
+    try:
+        logger.info("Pre-warming TensorFlow models...")
+        for stems in [2, 4]:
+            logger.info(f"Pre-warming {stems}-stem model...")
+            # Pre-initialize separator to load model into memory
+            spleeter_service._get_separator(stems)
+            logger.info(f"{stems}-stem model ready")
+        logger.info("All models pre-warmed successfully")
+    except Exception as e:
+        logger.warning(f"Model pre-warming failed (non-critical): {e}")
+
+    # Start background cleanup task
+    async def periodic_cleanup():
+        """Periodically clean up old jobs."""
+        while True:
+            await asyncio.sleep(3600)  # Run every hour
+            job_manager.cleanup_old_jobs()
+
+    asyncio.create_task(periodic_cleanup())
+    logger.info("Application startup complete")
 
 
 @app.middleware("http")
@@ -156,28 +239,33 @@ async def separate_audio(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(..., description="Audio file to separate (MP3, WAV, OGG, FLAC, M4A)"),
     stems: int = 2,
-) -> FileResponse:
+    async_mode: bool = True,
+) -> JSONResponse | FileResponse:
     """
     Separate audio file into stems.
 
     This endpoint accepts an audio file and separates it into individual stems
-    (vocals, drums, bass, etc.) using Spleeter. The result is returned as a ZIP file.
+    (vocals, drums, bass, etc.) using Spleeter.
 
     Args:
         request: FastAPI request object (for rate limiting)
         background_tasks: Background tasks for cleanup
         file: Audio file to separate
         stems: Number of stems (2, 4, or 5). Default: 2
+        async_mode: If True, returns job ID immediately and processes in background.
+                   If False, waits for completion (may timeout on Railway). Default: True
 
     Returns:
-        ZIP file containing separated audio stems
+        If async_mode=True: JSON with job_id and status endpoint
+        If async_mode=False: ZIP file containing separated audio stems
 
     Raises:
         HTTPException: If validation fails or processing error occurs
     """
     request_id = getattr(request.state, "request_id", "unknown")
     logger.info(
-        f"[{request_id}] Separation request received: filename={file.filename}, stems={stems}"
+        f"[{request_id}] Separation request received: filename={file.filename}, "
+        f"stems={stems}, async_mode={async_mode}"
     )
 
     # Edge case: Validate stems parameter type and value
@@ -207,6 +295,26 @@ async def separate_audio(
 
     # Save uploaded file
     spleeter_service.save_upload(file, file_path)
+
+    # Async mode: Create job and return immediately
+    if async_mode:
+        job = job_manager.create_job(file_path, stems)
+        # Start background processing
+        asyncio.create_task(process_separation_job(job.job_id, file_path, stems))
+
+        return JSONResponse(
+            status_code=202,  # Accepted
+            content={
+                "job_id": job.job_id,
+                "status": "pending",
+                "message": "Separation job created. Use the job_id to check status.",
+                "status_url": f"/jobs/{job.job_id}/status",
+                "result_url": f"/jobs/{job.job_id}/result",
+            },
+            headers={"X-Request-ID": request_id},
+        )
+
+    # Synchronous mode: Process immediately (may timeout on Railway)
     cleanup_paths = [file_path]
 
     try:
@@ -275,6 +383,84 @@ async def separate_audio(
             "Content-Length": str(zip_size),
         },
     )
+
+
+@app.get("/jobs/{job_id}/status", tags=["Separation"])
+def get_job_status(job_id: str) -> dict[str, Any]:
+    """
+    Get the status of a separation job.
+
+    Args:
+        job_id: Job identifier returned from /separate endpoint
+
+    Returns:
+        Job status information including progress and result URL
+
+    Raises:
+        HTTPException: If job not found
+    """
+    job = job_manager.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    return {
+        "status": "ok",
+        "job": job.to_dict(),
+    }
+
+
+@app.get("/jobs/{job_id}/result", tags=["Separation"])
+def get_job_result(job_id: str) -> FileResponse | JSONResponse:
+    """
+    Download the result of a completed separation job.
+
+    Args:
+        job_id: Job identifier
+
+    Returns:
+        ZIP file if job is completed, error message otherwise
+
+    Raises:
+        HTTPException: If job not found or not completed
+    """
+    job = job_manager.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    if job.status != JobStatus.COMPLETED:
+        return JSONResponse(
+            status_code=202,
+            content={
+                "status": "not_ready",
+                "job_id": job_id,
+                "current_status": job.status.value,
+                "message": "Job is still processing. Please check status endpoint.",
+                "status_url": f"/jobs/{job_id}/status",
+            },
+        )
+
+    if not job.result_path or not job.result_path.exists():
+        raise HTTPException(
+            status_code=500, detail="Result file not found. Job may have been cleaned up."
+        )
+
+    try:
+        zip_size = job.result_path.stat().st_size
+        safe_filename = f"separated_{job.stems}stems_{job_id[:8]}.zip"
+        safe_filename = "".join(c for c in safe_filename if c.isalnum() or c in "._-")
+
+        return FileResponse(
+            job.result_path,
+            media_type="application/zip",
+            filename=safe_filename,
+            headers={
+                "Content-Disposition": f'attachment; filename="{safe_filename}"',
+                "Content-Length": str(zip_size),
+            },
+        )
+    except OSError as e:
+        logger.error(f"Error accessing result file for job {job_id}: {e}")
+        raise HTTPException(status_code=500, detail="Could not access result file.") from e
 
 
 @app.get("/metrics", tags=["Monitoring"])
