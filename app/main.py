@@ -133,14 +133,20 @@ async def startup_event():
 
     # Recover stuck jobs (jobs in processing state that were interrupted by restart)
     try:
+        logger.info("Checking for stuck jobs...")
         current_time = time.time()
         stuck_threshold = 300  # 5 minutes - if processing for more than 5 min, likely stuck
 
         all_jobs = job_manager.get_all_jobs()
+        logger.info(f"Found {len(all_jobs)} total jobs to check")
         stuck_jobs = []
         for job in all_jobs:
             if job.status == JobStatus.PROCESSING:
                 elapsed = current_time - (job.started_at or job.created_at)
+                logger.info(
+                    f"Checking job {job.job_id}: status={job.status.value}, "
+                    f"elapsed={elapsed:.0f}s, threshold={stuck_threshold}s"
+                )
                 if elapsed > stuck_threshold:
                     stuck_jobs.append(job)
                     logger.warning(
@@ -158,7 +164,7 @@ async def startup_event():
         else:
             logger.info("No stuck jobs found on startup")
     except Exception as e:
-        logger.warning(f"Error recovering stuck jobs: {e}", exc_info=True)
+        logger.error(f"Error recovering stuck jobs: {e}", exc_info=True)
 
     # Start background cleanup task first (non-blocking)
     async def periodic_cleanup():
