@@ -131,6 +131,39 @@ async def startup_event():
     """Pre-warm TensorFlow models on startup and start background tasks."""
     logger.info("Starting application startup tasks...")
 
+    # Recover stuck jobs (jobs in processing state that were interrupted by restart)
+    async def recover_stuck_jobs():
+        """Recover jobs that were stuck in processing state after app restart."""
+        try:
+            import time
+            current_time = time.time()
+            stuck_threshold = 300  # 5 minutes - if processing for more than 5 min, likely stuck
+
+            all_jobs = job_manager.get_all_jobs()
+            stuck_jobs = []
+            for job in all_jobs:
+                if job.status == JobStatus.PROCESSING:
+                    elapsed = current_time - (job.started_at or job.created_at)
+                    if elapsed > stuck_threshold:
+                        stuck_jobs.append(job)
+                        logger.warning(
+                            f"Found stuck job {job.job_id} (processing for {elapsed:.0f}s). "
+                            f"Marking as failed."
+                        )
+                        job_manager.update_job_status(
+                            job.job_id,
+                            JobStatus.FAILED,
+                            error="Job was interrupted by application restart. Please retry.",
+                        )
+
+            if stuck_jobs:
+                logger.info(f"Recovered {len(stuck_jobs)} stuck jobs on startup")
+        except Exception as e:
+            logger.warning(f"Error recovering stuck jobs: {e}")
+
+    # Recover stuck jobs immediately
+    await recover_stuck_jobs()
+
     # Start background cleanup task first (non-blocking)
     async def periodic_cleanup():
         """Periodically clean up old jobs."""
