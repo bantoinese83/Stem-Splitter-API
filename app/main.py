@@ -111,19 +111,7 @@ async def startup_event():
     """Pre-warm TensorFlow models on startup and start background tasks."""
     logger.info("Starting application startup tasks...")
 
-    # Pre-warm TensorFlow models
-    try:
-        logger.info("Pre-warming TensorFlow models...")
-        for stems in [2, 4]:
-            logger.info(f"Pre-warming {stems}-stem model...")
-            # Pre-initialize separator to load model into memory
-            spleeter_service._get_separator(stems)
-            logger.info(f"{stems}-stem model ready")
-        logger.info("All models pre-warmed successfully")
-    except Exception as e:
-        logger.warning(f"Model pre-warming failed (non-critical): {e}")
-
-    # Start background cleanup task
+    # Start background cleanup task first (non-blocking)
     async def periodic_cleanup():
         """Periodically clean up old jobs."""
         while True:
@@ -131,7 +119,24 @@ async def startup_event():
             job_manager.cleanup_old_jobs()
 
     asyncio.create_task(periodic_cleanup())
-    logger.info("Application startup complete")
+
+    # Pre-warm TensorFlow models in background (non-blocking)
+    async def pre_warm_models():
+        """Pre-warm TensorFlow models in background."""
+        try:
+            logger.info("Pre-warming TensorFlow models...")
+            for stems in [2, 4]:
+                logger.info(f"Pre-warming {stems}-stem model...")
+                # Pre-initialize separator to load model into memory (run in thread pool)
+                await run_in_threadpool(spleeter_service._get_separator, stems)
+                logger.info(f"{stems}-stem model ready")
+            logger.info("All models pre-warmed successfully")
+        except Exception as e:
+            logger.warning(f"Model pre-warming failed (non-critical): {e}")
+
+    # Start model pre-warming in background (don't wait for it)
+    asyncio.create_task(pre_warm_models())
+    logger.info("Application startup complete (models pre-warming in background)")
 
 
 @app.middleware("http")
