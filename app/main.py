@@ -4,12 +4,12 @@ import os
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Union
 
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -237,7 +237,7 @@ def health_check() -> dict[str, Any]:
         }
 
 
-@app.post("/separate", tags=["Separation"])
+@app.post("/separate", tags=["Separation"], response_model=None)
 @limiter.limit(f"{settings.rate_limit_per_minute}/minute")
 async def separate_audio(
     request: Request,
@@ -245,7 +245,7 @@ async def separate_audio(
     file: UploadFile = File(..., description="Audio file to separate (MP3, WAV, OGG, FLAC, M4A)"),
     stems: int = 2,
     async_mode: bool = True,
-) -> JSONResponse | FileResponse:
+) -> Union[JSONResponse, FileResponse]:
     """
     Separate audio file into stems.
 
