@@ -414,8 +414,8 @@ def get_job_status(job_id: str) -> dict[str, Any]:
     }
 
 
-@app.get("/jobs/{job_id}/result", tags=["Separation"])
-def get_job_result(job_id: str) -> FileResponse | JSONResponse:
+@app.get("/jobs/{job_id}/result", tags=["Separation"], response_model=None)
+def get_job_result(job_id: str) -> Union[FileResponse, JSONResponse]:
     """
     Download the result of a completed separation job.
 
