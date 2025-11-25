@@ -315,10 +315,16 @@ class SpleeterService:
             )
 
         try:
-            # Get cached or create new separator
+            # Step 1: Get or create separator (this loads the TensorFlow model)
+            # This can take 10-30 seconds on first load
+            logger.info(f"Loading TensorFlow model for {stems}-stem separation...")
             separator = self._get_separator(stems)
+            logger.info(f"TensorFlow model loaded successfully")
 
-            logger.info(f"Running separation for {file_path}...")
+            # Step 2: Run separation (this is the CPU-intensive part)
+            # This can take 30-120 seconds depending on file size
+            logger.info(f"Running audio separation for {file_path}...")
+            logger.info(f"This may take 30-120 seconds depending on file size...")
             separator.separate_to_file(str(file_path), str(settings.output_dir))
             logger.info(f"Separation completed for {file_path}")
 

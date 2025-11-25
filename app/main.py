@@ -64,25 +64,45 @@ async def process_separation_job(job_id: str, file_path: Path, stems: int) -> No
         stems: Number of stems to separate into
     """
     logger.info(f"[{job_id}] Starting background separation processing")
-    job_manager.update_job_status(job_id, JobStatus.PROCESSING, progress=0.1)
+    job_manager.update_job_status(job_id, JobStatus.PROCESSING, progress=0.05)
 
     cleanup_paths = [file_path]
     zip_path = settings.output_dir / f"{job_id}.zip"
 
     try:
-        # Run Spleeter separation
-        job_manager.update_job_status(job_id, JobStatus.PROCESSING, progress=0.3)
+        # Step 1: Validate and prepare (5-10%)
+        logger.info(f"[{job_id}] Step 1/4: Validating file and preparing separation")
+        job_manager.update_job_status(job_id, JobStatus.PROCESSING, progress=0.1)
+
+        # Step 2: Load/initialize TensorFlow model (10-20%)
+        # This happens inside run_separation, but we update progress before
+        logger.info(f"[{job_id}] Step 2/4: Loading TensorFlow model (this may take 10-30 seconds)")
+        job_manager.update_job_status(job_id, JobStatus.PROCESSING, progress=0.15)
+
+        # Step 3: Run Spleeter separation (20-70%)
+        # This is the longest step - separation can take 30-120 seconds
+        logger.info(f"[{job_id}] Step 3/4: Running audio separation (this may take 30-120 seconds)")
+        job_manager.update_job_status(job_id, JobStatus.PROCESSING, progress=0.2)
+
+        # Run separation in thread pool with progress callback
         output_folder_path = await run_in_threadpool(
             spleeter_service.run_separation, file_path, stems
         )
         cleanup_paths.append(output_folder_path)
 
-        # Create zip file
+        # Separation completed, update progress
+        logger.info(f"[{job_id}] Separation completed, preparing output")
         job_manager.update_job_status(job_id, JobStatus.PROCESSING, progress=0.7)
+
+        # Step 4: Create zip file (70-95%)
+        logger.info(f"[{job_id}] Step 4/4: Creating ZIP archive")
+        job_manager.update_job_status(job_id, JobStatus.PROCESSING, progress=0.75)
         await run_in_threadpool(spleeter_service.create_zip, output_folder_path, zip_path)
         cleanup_paths.append(zip_path)
 
         # Verify zip file
+        logger.info(f"[{job_id}] Verifying output file")
+        job_manager.update_job_status(job_id, JobStatus.PROCESSING, progress=0.9)
         if not zip_path.exists() or zip_path.stat().st_size == 0:
             raise Exception("Zip file was not created or is empty")
 
