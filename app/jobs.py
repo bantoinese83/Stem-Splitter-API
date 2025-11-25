@@ -6,7 +6,7 @@ import time
 import uuid
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Union
 
 from app.config import settings
 
@@ -43,10 +43,10 @@ class Job:
         self.stems = stems
         self.status = JobStatus.PENDING
         self.created_at = time.time()
-        self.started_at: float | None = None
-        self.completed_at: float | None = None
-        self.error: str | None = None
-        self.result_path: Path | None = None
+        self.started_at: Union[float, None] = None
+        self.completed_at: Union[float, None] = None
+        self.error: Union[str, None] = None
+        self.result_path: Union[Path, None] = None
         self.progress: float = 0.0  # 0.0 to 1.0
 
     def to_dict(self) -> dict[str, Any]:
@@ -167,7 +167,7 @@ class JobManager:
         logger.info(f"Created job {job_id} for file {file_path.name} with {stems} stems")
         return job
 
-    def get_job(self, job_id: str) -> Job | None:
+    def get_job(self, job_id: str) -> Union[Job, None]:
         """
         Get a job by ID.
 
@@ -183,9 +183,9 @@ class JobManager:
         self,
         job_id: str,
         status: JobStatus,
-        progress: float | None = None,
-        error: str | None = None,
-        result_path: Path | None = None,
+        progress: Union[float, None] = None,
+        error: Union[str, None] = None,
+        result_path: Union[Path, None] = None,
     ) -> bool:
         """
         Update job status.
